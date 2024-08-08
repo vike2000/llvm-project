@@ -389,6 +389,7 @@ template <> struct ScalarEnumerationTraits<FormatStyle::LanguageKind> {
     IO.enumCase(Value, "CSharp", FormatStyle::LK_CSharp);
     IO.enumCase(Value, "Json", FormatStyle::LK_Json);
     IO.enumCase(Value, "Verilog", FormatStyle::LK_Verilog);
+    IO.enumCase(Value, "Calc", FormatStyle::LK_Calc);
   }
 };
 
@@ -3861,6 +3862,10 @@ tooling::Replacements sortUsingDeclarations(const FormatStyle &Style,
 LangOptions getFormattingLangOpts(const FormatStyle &Style) {
   LangOptions LangOpts;
 
+  LangOpts.Calc = Style.isCalc(); // Calc language mode
+  if (LangOpts.Calc)
+    return LangOpts;
+
   FormatStyle::LanguageStandard LexingStd = Style.Standard;
   if (LexingStd == FormatStyle::LS_Auto)
     LexingStd = FormatStyle::LS_Latest;
@@ -3875,7 +3880,7 @@ LangOptions getFormattingLangOpts(const FormatStyle &Style) {
   // Turning on digraphs in standards before C++0x is error-prone, because e.g.
   // the sequence "<::" will be unconditionally treated as "[:".
   // Cf. Lexer::LexTokenInternal.
-  LangOpts.Digraphs = LexingStd >= FormatStyle::LS_Cpp11;
+  LangOpts.Digraphs = !Style.isCalc() && LexingStd >= FormatStyle::LS_Cpp11;
 
   LangOpts.LineComment = 1;
   LangOpts.CXXOperatorNames = Style.isCpp();
@@ -3938,6 +3943,8 @@ static FormatStyle::LanguageKind getLanguageByFileName(StringRef FileName) {
       FileName.ends_with_insensitive(".vh")) {
     return FormatStyle::LK_Verilog;
   }
+  if (FileName.ends_with_insensitive(".cal"))
+    return FormatStyle::LK_Calc;
   return FormatStyle::LK_Cpp;
 }
 

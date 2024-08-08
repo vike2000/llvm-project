@@ -752,10 +752,12 @@ private:
   bool SkipWhitespace        (Token &Result, const char *CurPtr,
                               bool &TokAtPhysicalStartOfLine);
   bool SkipLineComment       (Token &Result, const char *CurPtr,
+                              const char CommentChar,
                               bool &TokAtPhysicalStartOfLine);
   bool SkipBlockComment      (Token &Result, const char *CurPtr,
                               bool &TokAtPhysicalStartOfLine);
-  bool SaveLineComment       (Token &Result, const char *CurPtr);
+  bool SaveLineComment       (Token &Result, const char *CurPtr,
+                              const char CommentChar);
 
   bool IsStartOfConflictMarker(const char *CurPtr);
   bool HandleEndOfConflictMarker(const char *CurPtr);

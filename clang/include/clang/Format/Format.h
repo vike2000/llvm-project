@@ -3204,7 +3204,10 @@ struct FormatStyle {
     /// Should be used for Verilog and SystemVerilog.
     /// https://standards.ieee.org/ieee/1800/6700/
     /// https://sci-hub.st/10.1109/IEEESTD.2018.8299595
-    LK_Verilog
+    LK_Verilog,
+    /// Should be used for Calc code.
+    /// (https://github.com/lcn2/calc)
+    LK_Calc,
   };
   bool isCpp() const { return Language == LK_Cpp || Language == LK_ObjC; }
   bool isCSharp() const { return Language == LK_CSharp; }
@@ -3215,6 +3218,7 @@ struct FormatStyle {
     return Language == LK_Proto || Language == LK_TextProto;
   }
   bool isTableGen() const { return Language == LK_TableGen; }
+  bool isCalc() const { return Language == LK_Calc; }
 
   /// Language, this format style is targeted at.
   /// \version 3.5

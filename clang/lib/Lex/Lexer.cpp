@@ -2554,13 +2554,14 @@ bool Lexer::SkipWhitespace(Token &Result, const char *CurPtr,
   return false;
 }
 
-/// We have just read the // characters from input.  Skip until we find the
-/// newline character that terminates the comment.  Then update BufferPtr and
-/// return.
+/// We have just read the line comment token from input.  Skip until we find
+/// the newline character that terminates the comment.  Then update BufferPtr
+/// and return.
 ///
 /// If we're in KeepCommentMode or any CommentHandler has inserted
 /// some tokens, this will store the first token and return true.
 bool Lexer::SkipLineComment(Token &Result, const char *CurPtr,
+                            const char CommentChar,
                             bool &TokAtPhysicalStartOfLine) {
   // If Line comments aren't explicitly enabled for this language, emit an
   // extension warning.
@@ -2655,18 +2656,18 @@ bool Lexer::SkipLineComment(Token &Result, const char *CurPtr,
 
     // If we read multiple characters, and one of those characters was a \r or
     // \n, then we had an escaped newline within the comment.  Emit diagnostic
-    // unless the next line is also a // comment.
-    if (CurPtr != OldPtr + 1 && C != '/' &&
-        (CurPtr == BufferEnd + 1 || CurPtr[0] != '/')) {
+    // unless the next line is also a line comment.
+    if (CurPtr != OldPtr + 1 && C != CommentChar &&
+        (CurPtr == BufferEnd + 1 || CurPtr[0] != CommentChar)) {
       for (; OldPtr != CurPtr; ++OldPtr)
         if (OldPtr[0] == '\n' || OldPtr[0] == '\r') {
-          // Okay, we found a // comment that ends in a newline, if the next
-          // line is also a // comment, but has spaces, don't emit a diagnostic.
+          // Okay, we found a line comment that ends in a newline, if the next
+          // line is also a line comment, but has spaces, don't emit a diagnostic.
           if (isWhitespace(C)) {
             const char *ForwardPtr = CurPtr;
             while (isWhitespace(*ForwardPtr))  // Skip whitespace.
               ++ForwardPtr;
-            if (ForwardPtr[0] == '/' && ForwardPtr[1] == '/')
+            if (ForwardPtr[0] == CommentChar && ForwardPtr[1] == CommentChar)
               break;
           }
 
@@ -2699,7 +2700,7 @@ bool Lexer::SkipLineComment(Token &Result, const char *CurPtr,
 
   // If we are returning comments as tokens, return this comment as a token.
   if (inKeepCommentMode())
-    return SaveLineComment(Result, CurPtr);
+    return SaveLineComment(Result, CurPtr, CommentChar);
 
   // If we are inside a preprocessor directive and we see the end of line,
   // return immediately, so that the lexer can return this as an EOD token.
@@ -2726,7 +2727,8 @@ bool Lexer::SkipLineComment(Token &Result, const char *CurPtr,
 
 /// If in save-comment mode, package up this Line comment in an appropriate
 /// way and return it.
-bool Lexer::SaveLineComment(Token &Result, const char *CurPtr) {
+bool Lexer::SaveLineComment(Token &Result, const char *CurPtr,
+                            const char CommentChar) {
   // If we're not in a preprocessor directive, just return the // comment
   // directly.
   FormTokenWithChars(Result, CurPtr, tok::comment);
@@ -2741,7 +2743,8 @@ bool Lexer::SaveLineComment(Token &Result, const char *CurPtr) {
   if (Invalid)
     return true;
 
-  assert(Spelling[0] == '/' && Spelling[1] == '/' && "Not line comment?");
+  assert(Spelling[0] == CommentChar && Spelling[1] == CommentChar &&
+    "Not line comment?");
   Spelling[1] = '*';   // Change prefix to "/*".
   Spelling += "*/";    // add suffix.
 
@@ -3829,11 +3832,13 @@ LexStart:
   SkipIgnoredUnits:
     CurPtr = BufferPtr;
 
-    // If the next token is obviously a // or /* */ comment, skip it efficiently
-    // too (without going through the big switch stmt).
-    if (CurPtr[0] == '/' && CurPtr[1] == '/' && !inKeepCommentMode() &&
+    // If the next token is obviously a line or block comment, skip it
+    // efficiently too (without going through the big switch stmt).
+    if ((LangOpts.Calc ? CurPtr[0] == '#' && CurPtr[1] == '#' :
+        CurPtr[0] == '/' && CurPtr[1] == '/') && !inKeepCommentMode() &&
         LineComment && (LangOpts.CPlusPlus || !LangOpts.TraditionalCPP)) {
-      if (SkipLineComment(Result, CurPtr+2, TokAtPhysicalStartOfLine))
+      if (SkipLineComment(Result, CurPtr+2, LangOpts.Calc ? '#' : '/',
+          TokAtPhysicalStartOfLine))
         return true; // There is a token to return.
       goto SkipIgnoredUnits;
     } else if (CurPtr[0] == '/' && CurPtr[1] == '*' && !inKeepCommentMode()) {
@@ -4133,6 +4138,13 @@ LexStart:
   case '/':
     // 6.4.9: Comments
     Char = getCharAndSize(CurPtr, SizeTmp);
+    // ...or Calc integer division
+    if (LangOpts.Calc) {
+      if (Char == '/') {
+        Kind = tok::slashslash;
+        CurPtr = ConsumeChar(CurPtr, SizeTmp, Result);
+      }
+    } else
     if (Char == '/') {         // Line comment.
       // Even if Line comments are disabled (e.g. in C89 mode), we generally
       // want to lex this as a comment.  There is one problem with this though,
@@ -4150,7 +4162,7 @@ LexStart:
 
       if (TreatAsComment) {
         if (SkipLineComment(Result, ConsumeChar(CurPtr, SizeTmp, Result),
-                            TokAtPhysicalStartOfLine))
+                            '/', TokAtPhysicalStartOfLine))
           return true; // There is a token to return.
 
         // It is common for the tokens immediately after a // comment to be
@@ -4378,14 +4390,24 @@ LexStart:
     break;
   case '#':
     Char = getCharAndSize(CurPtr, SizeTmp);
-    if (Char == '#') {
+    if (LangOpts.Calc && Char == '#') { // ## comment
       Kind = tok::hashhash;
-      CurPtr = ConsumeChar(CurPtr, SizeTmp, Result);
+
+      if (SkipLineComment(Result, ConsumeChar(CurPtr, SizeTmp, Result),
+                          '#', TokAtPhysicalStartOfLine))
+        return true; // There is a token to return.
+
+      // It is common for the tokens immediately after a // comment to be
+      // whitespace (indentation for the next line).  Instead of going through
+      // the big switch, handle it efficiently now.
+      goto SkipIgnoredUnits;
     } else if (Char == '@' && LangOpts.MicrosoftExt) {  // #@ -> Charize
       Kind = tok::hashat;
       if (!isLexingRawMode())
         Diag(BufferPtr, diag::ext_charize_microsoft);
       CurPtr = ConsumeChar(CurPtr, SizeTmp, Result);
+    } else if (LangOpts.Calc) {
+      Kind = tok::hash;
     } else {
       // We parsed a # character.  If this occurs at the start of the line,
       // it's actually the start of a preprocessing directive.  Callback to

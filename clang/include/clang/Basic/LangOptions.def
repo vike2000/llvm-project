@@ -525,6 +525,8 @@ BENIGN_LANGOPT(CheckConstexprFunctionBodies, 1, 1,
 
 LANGOPT(BoundsSafety, 1, 0, "Bounds safety extension for C")
 
+LANGOPT(Calc, 1, 0, "Calc language mode for lexer")
+
 #undef LANGOPT
 #undef COMPATIBLE_LANGOPT
 #undef BENIGN_LANGOPT

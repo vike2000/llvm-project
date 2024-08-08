@@ -34,7 +34,7 @@ namespace prec {
     ExclusiveOr     = 7,    // ^
     And             = 8,    // &
     Equality        = 9,    // ==, !=
-    Relational      = 10,   //  >=, <=, >, <
+    Relational      = 10,   // >=, <=, >, <
     Spaceship       = 11,   // <=>
     Shift           = 12,   // <<, >>
     Additive        = 13,   // -, +
